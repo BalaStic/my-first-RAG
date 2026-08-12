@@ -7,6 +7,9 @@ from llama_index.core import SimpleDirectoryReader, VectorStoreIndex, Settings
 from llama_index.llms.google_genai import GoogleGenAI
 from llama_index.embeddings.google_genai import GoogleGenAIEmbedding
 
+# PDF beolvasáshoz szükséges reader (pypdf alapú)
+from llama_index.readers.file import PDFReader
+
 # 1. Környezeti változók betöltése (.env fájlból)
 load_dotenv()
 
@@ -28,44 +31,29 @@ Settings.llm = GoogleGenAI(model="gemini-3.1-pro-preview")
 # Embedding modell a vektoros kereséshez (Google hivatalos embedding modellje)
 Settings.embed_model = GoogleGenAIEmbedding(model_name="gemini-embedding-2")
 
+# Chunking (darabolási) beállítások
+Settings.chunk_size = 512
+Settings.chunk_overlap = 50
 
-# 3. Minta adatok előkészítése (hogy a script tesztelhető legyen)
-def setup_sample_data():
-    data_dir = Path("./data")
-    data_dir.mkdir(exist_ok=True)
-
-    sample_file = data_dir / "projekt_specifikacio.txt"
-    if not sample_file.exists():
-        sample_file.write_text(
-            """
-=== Autóipari Szoftverprojekt Specifikáció 2026 ===
-Dokumentumazonosító: SPEC-2026-AUT-01
-Szerző: Kovács Péter (Vezető Szoftverfejlesztő)
-
-1. Biztonsági és Minőségi Szabványok:
-Az elektronikus fékrendszer (EBS) vezérlőszoftvere szigorúan az ISO 26262 ASIL-D előírásoknak megfelelően készül.
-A diagnosztikai teszteléshez Vector CANoe restbus szimulációt használunk.
-
-2. Architekturális Döntések:
-A mikrokontroller kommunikációja CAN-FD buszon történik.
-A belső fejlesztési felületen Python-alapú automatizált tesztscriptek futnak.
-
-3. Projekt MÉRLEGEk ÉS HATÁRIDŐK:
-A fázis 1 lezárása 2026 harmadik negyedévében (Q3) esedékes.
-A projekt teljes költségvetési kerete 65 millió HUF.
-""",
-            encoding="utf-8",
-        )
-        print(f"📄 Minta fájl létrehozva: {sample_file}")
-
-
-# 4. A RAG Pipeline futtatása
+# 3. A RAG Pipeline futtatása
 def main():
-    setup_sample_data()
-
     # Dokumentumok beolvasása a ./data mappából
     print("\n📚 Dokumentumok beolvasása a ./data mappából...")
-    documents = SimpleDirectoryReader(input_dir="./data").load_data()
+    file_extractor = {".pdf": PDFReader()}
+    documents = SimpleDirectoryReader(
+        input_dir="./data", file_extractor=file_extractor
+    ).load_data()
+
+    # Ellenőrzés, hogy minden fájl valóban be legyen olvasva
+    # (így nem vesz el csendben egy PDF-et, ha valami rosszul menne)
+    beolvasott_fajlok = {d.metadata.get("file_name") for d in documents}
+    print(f"   Beolvasott dokumentumok ({len(documents)} db): {beolvasott_fajlok}")
+
+    if len(documents) == 0:
+        raise RuntimeError(
+            "❌ Egyetlen dokumentum sem lett beolvasva a ./data mappából! "
+            "Ellenőrizd, hogy a mappa létezik és nem üres."
+        )
 
     # Vektorindex építése (a háttérben lefut a chunking + Gemini embedding)
     print("⚡ Vektorindex építése...")
@@ -75,7 +63,8 @@ def main():
     query_engine = index.as_query_engine(similarity_top_k=2)
 
     # Kérdés feltevése
-    kerdes = "Milyen szabványnak felel meg a fékrendszer és mekkora a projekt büdzséje?"
+    # kerdes = "Milyen szabványnak felel meg a fékrendszer és mekkora a projekt büdzséje?"
+    kerdes = "Balázs melyik évben állt munkába?"
     print(f"\n❓ Kérdés: {kerdes}\n")
 
     # Válasz generálása

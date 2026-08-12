@@ -2,3 +2,6 @@
 .venv/
 data/
 docs/
+__pycache__/
+example_questions.txt
+commit_msg.txt
