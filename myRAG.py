@@ -2,89 +2,89 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# LlamaIndex modulok importálása
+# Import LlamaIndex modules
 from llama_index.core import SimpleDirectoryReader, VectorStoreIndex, Settings
 from llama_index.llms.google_genai import GoogleGenAI
 from llama_index.embeddings.google_genai import GoogleGenAIEmbedding
 
-# PDF beolvasáshoz szükséges reader (pypdf alapú)
+# Reader required for PDF loading (based on pypdf)
 from llama_index.readers.file import PDFReader
 
-# 1. Környezeti változók betöltése (.env fájlból)
+# 1. Load environment variables (from the .env file)
 load_dotenv()
 
-# HA nem használsz .env fájlt, ide írd be a kulcsodat:
-# os.environ["GOOGLE_API_KEY"] = "AIzaSy_A_TE_API_KULCSOD"
+# If you are not using a .env file, enter your key here:
+# os.environ["GOOGLE_API_KEY"] = "AIzaSy_YOUR_API_KEY"
 
 if "GOOGLE_API_KEY" not in os.environ:
     raise ValueError(
-        "❌ A GOOGLE_API_KEY nincs beállítva! "
-        "Állítsd be a .env fájlban vagy a kód elején az os.environ['GOOGLE_API_KEY'] értékét."
+        "❌ GOOGLE_API_KEY is not set! "
+        "Set it in the .env file or assign os.environ['GOOGLE_API_KEY'] near the beginning of this script."
     )
 
-# 2. Gemini LLM és Embedding beállítása
-print("🤖 Gemini modellek konfigurálása...")
+# 2. Configure Gemini LLM and embeddings
+print("🤖 Configuring Gemini models...")
 
-# LLM a válaszadáshoz (Gemini 1.5 Pro vagy Flash)
+# LLM for generating responses (Gemini 1.5 Pro or Flash)
 Settings.llm = GoogleGenAI(model="gemini-3.1-pro-preview")
 
-# Embedding modell a vektoros kereséshez (Google hivatalos embedding modellje)
+# Embedding model for vector search (Google's official embedding model)
 Settings.embed_model = GoogleGenAIEmbedding(model_name="gemini-embedding-2")
 
-# Chunking (darabolási) beállítások
+# Chunking settings
 Settings.chunk_size = 512
 Settings.chunk_overlap = 50
 
-# 3. A RAG Pipeline futtatása
+# 3. Run the RAG pipeline
 def main():
-    # Dokumentumok beolvasása a ./data mappából
-    print("\n📚 Dokumentumok beolvasása a ./data mappából...")
+    # Load documents from the ./data directory
+    print("\n📚 Loading documents from the ./data directory...")
     file_extractor = {".pdf": PDFReader()}
     documents = SimpleDirectoryReader(
         input_dir="./data", file_extractor=file_extractor
     ).load_data()
 
-    # Ellenőrzés, hogy minden fájl valóban be legyen olvasva
-    # (így nem vesz el csendben egy PDF-et, ha valami rosszul menne)
-    beolvasott_fajlok = {d.metadata.get("file_name") for d in documents}
-    print(f"   Beolvasott dokumentumok ({len(documents)} db): {beolvasott_fajlok}")
+    # Verify that every file was actually loaded
+    # (so a PDF is not silently skipped if something goes wrong)
+    loaded_files = {d.metadata.get("file_name") for d in documents}
+    print(f"   Loaded documents ({len(documents)}): {loaded_files}")
 
     if len(documents) == 0:
         raise RuntimeError(
-            "❌ Egyetlen dokumentum sem lett beolvasva a ./data mappából! "
-            "Ellenőrizd, hogy a mappa létezik és nem üres."
+            "❌ No documents were loaded from the ./data directory! "
+            "Check that the directory exists and is not empty."
         )
 
-    # Vektorindex építése (a háttérben lefut a chunking + Gemini embedding)
-    print("⚡ Vektorindex építése...")
+    # Build the vector index (chunking and Gemini embedding run in the background)
+    print("⚡ Building the vector index...")
     index = VectorStoreIndex.from_documents(documents)
 
-    # Query Engine példányosítása (a top 2 legrelevánsabb találatot kérjük le)
+    # Instantiate the query engine (retrieve the top 2 most relevant results)
     query_engine = index.as_query_engine(similarity_top_k=2)
 
-    # Kérdés feltevése
-    # kerdes = "Milyen szabványnak felel meg a fékrendszer és mekkora a projekt büdzséje?"
-    kerdes = "Balázs melyik évben állt munkába?"
-    print(f"\n❓ Kérdés: {kerdes}\n")
+    # Ask a question
+    # question = "Which standard does the braking system comply with, and what is the project budget?"
+    question = "In which year did Balázs start working?"
+    print(f"\n❓ Question: {question}\n")
 
-    # Válasz generálása
-    response = query_engine.query(kerdes)
+    # Generate a response
+    response = query_engine.query(question)
 
-    # 5. Eredmények kiíratása
-    print("💡 Válasz:")
+    # 5. Print results
+    print("💡 Answer:")
     print(response.response)
 
     print("\n" + "=" * 60)
-    print("📌 FORRÁSOK ÉS IDÉZETEK (NotebookLM hivatkozási logika):")
+    print("📌 SOURCES AND CITATIONS (NotebookLM citation logic):")
     print("=" * 60)
 
     for i, node in enumerate(response.source_nodes, 1):
-        file_name = node.metadata.get("file_name", "Ismeretlen fájl")
+        file_name = node.metadata.get("file_name", "Unknown file")
         score = f"{node.score:.4f}" if node.score is not None else "N/A"
         content_snippet = node.node.get_content().strip().replace("\n", " ")
 
-        print(f"\n[{i}] Fájl: {file_name} (Szemantikai relevancia: {score})")
-        print(f"    Beidézett részlet: \"{content_snippet[:180]}...\"")
+        print(f"\n[{i}] File: {file_name} (Semantic relevance: {score})")
+        print(f"    Quoted excerpt: \"{content_snippet[:180]}...\"")
 
 
 if __name__ == "__main__":
